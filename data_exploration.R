@@ -27,7 +27,8 @@ housing_clean <- housing |>
     ),
     Regionname = factor(Regionname),
     Date = dmy(Date),
-    SaleYear = year(Date)
+    SaleYear = year(Date),
+    YearBuilt = if_else(YearBuilt < 1830, NA, YearBuilt)
   ) |>
   select(Suburb, Type, Method, Regionname, CouncilArea, Date, SaleYear,
          Price, Rooms, Bathroom, Car, Distance, Landsize, BuildingArea,
