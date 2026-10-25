@@ -112,3 +112,14 @@ ggplot(housing_clean, aes(x = Distance, y = Price, color = Type)) +
   labs(title = "Sale Price vs Distance from Melbourne CBD by Region",
        x = "Distance from CBD (km)", y = "Sale Price (log scale)",
        color = "Property Type")
+
+# Plot 6: Heatmap of median price by region and number of rooms
+housing_clean |>
+  filter(Rooms <= 6) |>
+  group_by(Regionname, Rooms) |>
+  summarize(median_price = median(Price), .groups = "drop") |>
+  ggplot(aes(x = factor(Rooms), y = Regionname, fill = median_price)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(labels = scales::label_dollar()) +
+  labs(title = "Median Sale Price by Region and Number of Rooms",
+       x = "Number of Rooms", y = "Region", fill = "Median Price")
