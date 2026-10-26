@@ -3,6 +3,7 @@ library(shiny)
 library(tidyverse)
 library(bslib)
 library(thematic)
+library(shinycssloaders)
 
 # ---- Read in and clean data ----
 housing <- read_csv("Melbourne_housing_FULL.csv",
@@ -46,6 +47,19 @@ num_vars <- c("Price" = "Price",
               "Land Size (sq m)" = "Landsize",
               "Building Area (sq m)" = "BuildingArea",
               "Year Built" = "YearBuilt")
+
+cat_vars <- c("Property Type" = "Type",
+              "Region" = "Regionname",
+              "Sale Method" = "Method")
+
+# Look up the friendly label for any variable (used in plot titles and axes)
+all_vars <- c(num_vars, cat_vars)
+get_label <- function(var) {
+  names(all_vars)[all_vars == var]
+}
+
+# Halloween colors for plots
+spooky_colors <- c("#FF7518", "#9B59B6", "#6BCB77", "#F4D35E", "#E63946", "#4ECDC4")
 
 # ---- UI ----
 ui <- fluidPage(
@@ -114,7 +128,40 @@ ui <- fluidPage(
                  br(), br(),
                  DT::dataTableOutput("data_table")
         ),
-        tabPanel("Data Exploration")
+        tabPanel("Data Exploration",
+                          br(),
+                 radioButtons("summary_type", "What would you like to explore?",
+                              choices = c("Categorical Summaries", "Numeric Summaries")),
+                          
+                          # Shown only when "Categorical Summaries" is selected
+                 conditionalPanel(
+                   condition = "input.summary_type == 'Categorical Summaries'",
+                   fluidRow(
+                     column(10, offset = 1,
+                            h4("Bar Chart"),
+                            withSpinner(plotOutput("bar_plot"), color = "#FF7518")
+                     )
+                   ),
+                   br(),
+                   fluidRow(
+                     column(4,
+                            selectInput("cat_var1", "Categorical Variable", choices = cat_vars),
+                            selectInput("cat_var2", "Second Categorical Variable (optional)",
+                                        choices = c("None" = "None", cat_vars))
+                     ),
+                     column(8,
+                            h4("Contingency Table"),
+                            tableOutput("cont_table")
+                     )
+                   )
+                 ),
+                          
+                          # Shown only when "Numeric Summaries" is selected 
+                          conditionalPanel(
+                            condition = "input.summary_type == 'Numeric Summaries'",
+                            p("Coming soon...")
+                          )
+        )
       )
     )
   )
@@ -168,7 +215,52 @@ server <- function(input, output, session) {
       write_csv(rv$data, file)
     }
   )
+  # Contingency table: one-way or two-way
+  output$cont_table <- renderTable({
+    validate(need(nrow(rv$data) > 0,
+                  "No homes match your filters. Try widening your selections."))
+    
+    if (input$cat_var2 == "None") {
+      rv$data |>
+        count(.data[[input$cat_var1]], name = "Count")
+    } else {
+      validate(need(input$cat_var1 != input$cat_var2,
+                    "Please choose two different categorical variables."))
+      rv$data |>
+        count(.data[[input$cat_var1]], .data[[input$cat_var2]]) |>
+        pivot_wider(names_from = all_of(input$cat_var2),
+                    values_from = n, values_fill = 0)
+    }
+  })
+  
+  # Bar chart: plain or side-by-side
+  output$bar_plot <- renderPlot({
+    validate(need(nrow(rv$data) > 0,
+                  "No homes match your filters. Try widening your selections."))
+    
+    if (input$cat_var2 == "None") {
+      ggplot(rv$data, aes(x = .data[[input$cat_var1]])) +
+        geom_bar(fill = "#FF7518") +
+        labs(title = paste("Number of Sales by", get_label(input$cat_var1)),
+             x = get_label(input$cat_var1), y = "Number of Sales") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              text = element_text(size = 15))
+    } else {
+      validate(need(input$cat_var1 != input$cat_var2,
+                    "Please choose two different categorical variables."))
+      ggplot(rv$data, aes(x = .data[[input$cat_var1]],
+                          fill = .data[[input$cat_var2]])) +
+        geom_bar(position = "dodge") + scale_fill_manual(values = spooky_colors) +
+        labs(title = paste("Number of Sales by", get_label(input$cat_var1),
+                           "and", get_label(input$cat_var2)),
+             x = get_label(input$cat_var1), y = "Number of Sales",
+             fill = get_label(input$cat_var2)) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              text = element_text(size = 15))
+    }
+  })
 }
+
 
 # ---- Run the app ----
 thematic_shiny()
