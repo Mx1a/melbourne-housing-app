@@ -157,10 +157,35 @@ ui <- fluidPage(
                  ),
                           
                           # Shown only when "Numeric Summaries" is selected 
-                          conditionalPanel(
-                            condition = "input.summary_type == 'Numeric Summaries'",
-                            p("Coming soon...")
-                          )
+                 conditionalPanel(
+                   condition = "input.summary_type == 'Numeric Summaries'",
+                   fluidRow(
+                     column(10, offset = 1,
+                            h4("Plot"),
+                            withSpinner(plotOutput("num_plot", height = "500px"), color = "#FF7518")
+                     )
+                   ),
+                   br(),
+                   fluidRow(
+                     column(4,
+                            selectInput("num_y", "Numeric Variable", choices = num_vars, selected = "Price"),
+                            selectInput("group_var", "Summarize Across", choices = cat_vars),
+                            selectInput("plot_type", "Plot Type",
+                                        choices = c("Histogram", "Boxplot", "Scatter Plot", "Heatmap")),
+                            conditionalPanel(
+                              condition = "input.plot_type == 'Scatter Plot'",
+                              selectInput("scatter_x", "X-Axis Variable", choices = num_vars,
+                                          selected = "Distance")
+                            ),
+                            selectInput("color_var", "Color By", choices = cat_vars),
+                            selectInput("facet_var", "Facet By", choices = c("None" = "None", cat_vars))
+                     ),
+                     column(8,
+                            h4("Summary Statistics"),
+                            tableOutput("num_summary")
+                     )
+                   )
+                 )
         )
       )
     )
@@ -259,9 +284,95 @@ server <- function(input, output, session) {
               text = element_text(size = 15))
     }
   })
+  
+  # Numeric summaries across levels of a categorical variable
+    
+    
+    # Numeric summaries across levels of a categorical variable
+    output$num_summary <- renderTable({
+      validate(need(nrow(rv$data) > 0,
+                    "No homes match your filters. Try widening your selections."))
+      y_var <- input$num_y
+      
+      rv$data |>
+        group_by(.data[[input$group_var]]) |>
+        summarize(
+          N = sum(!is.na(.data[[y_var]])),
+          Mean = mean(.data[[y_var]], na.rm = TRUE),
+          Median = median(.data[[y_var]], na.rm = TRUE),
+          SD = sd(.data[[y_var]], na.rm = TRUE),
+          Min = min(.data[[y_var]], na.rm = TRUE),
+          Max = max(.data[[y_var]], na.rm = TRUE)
+        )
+    }, digits = 1, format.args = list(big.mark = ","))
+
+  # Numeric plots
+  output$num_plot <- renderPlot({
+    validate(need(nrow(rv$data) > 0,
+                  "No homes match your filters. Try widening your selections."))
+    
+    # Heatmap uses a color gradient instead of the spooky colors
+    
+    if (input$plot_type == "Heatmap") {
+      heat_data <- rv$data |>
+        filter(Rooms <= 6) |>
+        group_by(.data[[input$group_var]], Rooms) |>
+        summarize(median_value = median(.data[[input$num_y]], na.rm = TRUE),
+                  .groups = "drop")
+      
+      heat_plot <- ggplot(heat_data, aes(x = factor(Rooms),
+                                         y = .data[[input$group_var]],
+                                         fill = median_value)) +
+        geom_tile(color = "white") +
+        scale_fill_gradient(low = "#2E0854", high = "#FF7518",
+                            labels = scales::label_comma()) +
+        labs(title = paste("Median", get_label(input$num_y), "by",
+                           get_label(input$group_var), "and Number of Rooms"),
+             x = "Number of Rooms", y = get_label(input$group_var),
+             fill = paste("Median", get_label(input$num_y))) +
+        theme(text = element_text(size = 15))
+      
+      return(heat_plot)
+    }
+    # Step 1: make the basic plot for the chosen type
+    if (input$plot_type == "Histogram") {
+      p <- ggplot(rv$data, aes(x = .data[[input$num_y]],
+                               fill = .data[[input$color_var]])) +
+        geom_histogram(bins = 40, alpha = 0.6, position = "identity") +
+        labs(x = get_label(input$num_y), y = "Count")
+      
+    } else if (input$plot_type == "Boxplot") {
+      p <- ggplot(rv$data, aes(x = .data[[input$group_var]],
+                               y = .data[[input$num_y]],
+                               fill = .data[[input$color_var]])) +
+        geom_boxplot() +
+        labs(x = get_label(input$group_var), y = get_label(input$num_y))
+      
+    } else {
+      validate(need(input$scatter_x != input$num_y,
+                    "Please choose two different numeric variables."))
+      p <- ggplot(rv$data, aes(x = .data[[input$scatter_x]],
+                               y = .data[[input$num_y]],
+                               color = .data[[input$color_var]])) +
+        geom_point(alpha = 0.4) +
+        labs(x = get_label(input$scatter_x), y = get_label(input$num_y))
+    }
+    
+    # Step 2: add facets if the user picked a facet variable
+    if (input$facet_var != "None") {
+      p <- p + facet_wrap(vars(.data[[input$facet_var]]))
+    }
+    # Step 3: add colors, title, and text size (same for every plot)
+    p +
+      scale_fill_manual(values = spooky_colors) +
+      scale_color_manual(values = spooky_colors) +
+      labs(title = paste(input$plot_type, "of", get_label(input$num_y)),
+           fill = get_label(input$color_var),
+           color = get_label(input$color_var)) +
+      theme(text = element_text(size = 15),
+            axis.text.x = element_text(angle = 45, hjust = 1))
+  })
 }
-
-
 # ---- Run the app ----
 thematic_shiny()
 shinyApp(ui = ui, server = server)
