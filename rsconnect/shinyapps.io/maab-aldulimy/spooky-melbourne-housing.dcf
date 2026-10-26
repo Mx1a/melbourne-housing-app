@@ -1,0 +1,13 @@
+name: spooky-melbourne-housing
+title: spooky-melbourne-housing
+username: maab-aldulimy
+account: maab-aldulimy
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 18283510
+bundleId: 12741996
+url: https://maab-aldulimy.shinyapps.io/spooky-melbourne-housing/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: data_exploration.R|LICENSE|README.md
